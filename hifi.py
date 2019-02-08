@@ -8,15 +8,42 @@ import time
 
 #cmd = 'io set out_enable 0'
 log_level = logging.DEBUG  # default
-EOL = '\r'
-EORESP = '\n\r\n'  # End Off Respons from hifi
+EOL = '\r\n'  #this is CRLF which is standard in HTTP to mark terminate
+EOLHEX = '0d0a'
+EORESP = '\r\n'  # End Off Respons from hifi
 ACKRESP = 'ACK\n\r\n'
 
-def get_com(port="/dev/ttyAMA0", baudrate=9600, timeout=0.1):
-    return serial.Serial(port=port, baudrate=baudrate, timeout=timeout)
+logging.basicConfig()
+logger = logging.getLogger('ser_cmd')
 
+def get_com(port="/dev/ttyAMA0", baudrate=38400, timeout=0.1):
+    com = serial.Serial(port=port, baudrate=baudrate, timeout=timeout)
+    r = request(com, 'dummy cmd')
+    return com
 
-def request(com, cmd):
+def check_read_buffer(com, timeout=1, sleeptime=0.02, eol=None):
+    r = ''
+    t0 = time.time()
+    while True:
+        while com.inWaiting():
+            r += com.read(com.inWaiting())
+            time.sleep(sleeptime)
+        logger.debug('com.read: {}'.format(repr(r)))
+        if eol is None:
+            if EORESP in r:
+                break
+            elif ACKRESP in r:
+                break
+        elif eol in r:
+            break
+        if (time.time() - t0) > timeout:
+            logger.error('hifi.py timeout.')
+            logger.error('Recv: {}'.format(repr(r)))
+            raise Exception('timeout before end of message.')
+        time.sleep(sleeptime)
+    return r
+
+def request(com, cmd, binary=False):
     if not isinstance(cmd, str):
         raise TypeError('cmd must be str')
 
@@ -28,30 +55,34 @@ def request(com, cmd):
     if _:
         logger.debug('Flush: {}'.format(repr(_)))
 
-    com.write(cmd + EOL)
-    r = ''
-    timeout = 7
-    sleeptime = 0.01
-    t0 = time.time()
-    while True:
-        while com.inWaiting():
-            r += com.read(com.inWaiting())
-            time.sleep(sleeptime)
-        logger.debug('com.read: {}'.format(repr(r)))
-        if EORESP in r:
-            break
-        elif ACKRESP in r:
-            break
-        if (time.time() - t0) > timeout:
-            logger.error('hifi.py timeout.')
-            raise Exception('timeout before end of message.')
-        time.sleep(sleeptime)
+    if binary:
+        # We are expecting a string representing hex numbers
+        # '61626364' is actually 'abcd'
+        # todo: is it possible to send and handle '61626364' directly?
+        #cmd = 'io set out_enable 0'
+        #cmd_hex = cmd.encode('hex')
+        bytedata = bytearray.fromhex(cmd + EOLHEX)
+        logger.debug(bytedata)
+        com.write(bytedata)
+    else:
+        # print('Writing')
+        # i = 0;
+        # while True:
+        #     print("{}".format(repr(cmd[i])))
+        #     i += 1
+        #     if cmd[i] == '\r':
+        #         break
+        cmd = cmd + EOL
+        if 'dummy' not in cmd:
+            print("Sending: {}".format(repr(cmd)))
+        com.write(cmd)
+    r = check_read_buffer(com)
     return r
 
 
-def send(com, cmd):
+def send(com, cmd, binary=False):
     try:
-        return request(com, cmd)
+        return request(com, cmd, binary=binary)
     except Exception as e:
         logger.error(e)
         return 'error'
@@ -69,6 +100,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--command",
                         help="Execute command and exit")
+    parser.add_argument("-b", "--binary",
+                        help="Send binary byte data and exit")
     #parser.add_argument("-p", "--port",
     #                    help="Set serial port, e.g. /dev/ttyACM0")
     parser.add_argument("-v", "--verbosity",
@@ -84,7 +117,6 @@ if __name__ == '__main__':
         log_level = logging.INFO
 
     logging.basicConfig(level=log_level)
-    logger = logging.getLogger('ser_cmd')
     logger.info('Setting logging level to {}'.format(repr(log_level)))
 
     if args.command:
@@ -96,6 +128,8 @@ if __name__ == '__main__':
     try:
         if args.command:
             print_resp(send(com, args.command))
+        elif args.binary:
+            print_resp(send(com, args.binary, binary=True))
         else:
             print_resp(send(com, 'version'))
             print

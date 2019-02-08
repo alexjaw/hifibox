@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="ak4497controller">
+    <serverData>
+      <paths name="ak4497controller">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/pi/hifibox" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="pi@ak4497controller.local:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/pi/hifibox" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
